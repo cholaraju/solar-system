@@ -1,0 +1,110 @@
+name: caching-dependencies
+# Here we are caching node dependencies 
+
+## we continue on error to continue if one job or step fails
+on: 
+  workflow_dispatch:
+#   push:
+#     branches:
+#       - main
+#       - 'feature/*'
+# commenting for future use because my db not working with this code
+
+jobs:
+  unit-testing:
+    name: Unit Testing
+    strategy:
+        matrix:
+            node-version: [18,19,20]
+            operating-system: [ubuntu-latest, macos-latest]
+            # 3*2 = 6 combinations it will create 6 jobs to run this workflow
+            # since we have used exclude syntax, to exclude an node 18 version on macos-latest it will run 5 jobs.
+            exclude:
+              - node-version: 18
+                operating-system: macos-latest
+    runs-on: ${{ matrix.operating-system }} 
+    
+    env:
+      MONGO_USERNAME: 'superuser'
+      MONGO_PASSWORD: 'SuperPassword'
+      MONGO_URI: "mongodb+srv://superrccluster.d83jj.mongodb.net/superData"
+    #  'mongodb+srv://superrccluster.d83jj.mongodb.net/superData' 
+      # mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority 
+
+    steps:
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version - ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+      - name: Cache Npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock .json') }}
+          # when we run npm install it will create a node_modules folder with all the dependencies
+          # we are caching the node_modules folder to speed up the workflow
+          # Here path is the path to the folder we want to cache
+            # key is the unique key for the cache, we are using the runner OS and the hash of the package-lock.json file to create a unique key
+          # when ever we change the package-lock.json file it will create a new cache key
+          #  invalidate the cache and create a new cache with the new key
+
+      - name: Install Dependencies
+        run: npm install
+        
+        
+
+      # Wait for MongoDB to be ready
+
+      - name: Unit Testing
+        run: npm test
+      - name: Archive Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mocha-Test.Result
+          path: test-results.xml
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version
+        uses: actions/setup-node@v3
+        continue-on-error: true
+        with:
+          node-version: 20
+      - name: Cache Npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock .json') }}
+          #in our case we are using package-lock.json file to create a unique key for the cache by hashing the package-lock.json file
+          # when we modify the file it's hash changes and create a new cache by invalidating the previous cache'
+           
+    # once package-lock.json file is changed it will create a new cache key
+     # and it will download all the dependencies and maked it await available for next workflow run
+     # so next runs (i.e if no dependencies are changed) it will use the cached dependencies  from cache
+        # this will speed up the workflow run time because it will not download the dependencies again and
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Code Coverage
+        run: npm run coverage # when we run this command it will generate a coverage folder with the coverage report with name coverage-summary.json in the coverage folder.
+
+      - name: Archive Coverage Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: Code-Coverage-Results
+          path: coverage  # this will upload the entire coverage folder
+          retention-days: 5
+        
+        
+
+
