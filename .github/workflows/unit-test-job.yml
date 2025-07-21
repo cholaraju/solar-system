@@ -43,5 +43,8 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Wait for MongoDB to be ready
+        run: npx wait-on tcp:mongodb:27017
+
       - name: Unit Testing
         run: npm test
