@@ -31,7 +31,8 @@ jobs:
     env:
       MONGO_USERNAME: root
       MONGO_PASSWORD: example
-      MONGO_URI: "mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0y"
+      MONGO_URI: "mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority
+
 
     steps:
       
