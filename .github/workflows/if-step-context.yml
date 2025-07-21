@@ -1,0 +1,102 @@
+name: Using if expressions with Step contexts
+
+## we continue on error to continue if one job or step fails
+on: 
+  workflow_dispatch:
+#   push:
+#     branches:
+#       - main
+#       - 'feature/*'
+# commenting for future use because my db not working with this code
+
+jobs:
+  unit-testing:
+    name: Unit Testing
+    strategy:
+        matrix:
+            node-version: [18,19,20]
+            operating-system: [ubuntu-latest, macos-latest]
+            # 3*2 = 6 combinations it will create 6 jobs to run this workflow
+            # since we have used exclude syntax, to exclude an node 18 version on macos-latest it will run 5 jobs.
+            exclude:
+              - node-version: 18
+                operating-system: macos-latest
+    runs-on: ${{ matrix.operating-system }} 
+    
+    env:
+      MONGO_USERNAME: 'superuser'
+      MONGO_PASSWORD: 'SuperPassword'
+      MONGO_URI: "mongodb+srv://superrccluster.d83jj.mongodb.net/superData"
+    #  'mongodb+srv://superrccluster.d83jj.mongodb.net/superData' 
+      # mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority 
+
+    steps:
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version - ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+
+      - name: Install Dependencies
+        run: npm install
+
+      # Wait for MongoDB to be ready
+
+      - name: Unit Testing
+        id: nodejs-unit-testing-step # we are giving an id to this step so that we can use it in the next step
+        run: npm test
+        # think as unit fails in order to access the result of unit test we if expression
+        # with out archiving test results  we don't know which test case failed in unit test so  that's why we  use if expression
+      - name: Archive Test Results
+        uses: actions/upload-artifact@v4
+        # we use if expression to check the outcome of the previous step
+        # the syntax is if: steps.<step-id>.outcome == 'failure' || steps.<step-id>.outcome == 'success'
+        if: always() # it always runs this step regardless of the previous step's outcome
+       # failure() # it will run this step only if the previous step fails
+        # success() # it will run this step only if the previous step is successful
+        #failure() && (steps.nodejs-unit-testing-step.outcome == 'failure' || steps.nodejs-unit-testing-step.outcome == 'success')
+        # by explicitly adding failure() we are checking if the previous step failed or not
+        # the default is success() it is going to. treat previous step as success and execute only if step is successful
+        # this will run if the previous step is successful or failed
+        # by adding this fails because of status check functions
+        # by default success check is added so  this step only executes if the previous step are successful 
+        
+        with:
+          name: Mocha-Test.Result
+          path: test-results.xml
+     
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version
+        uses: actions/setup-node@v3
+        continue-on-error: true
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Code Coverage
+        run: npm run coverage # when we run this command it will generate a coverage folder with the coverage report with name coverage-summary.json in the coverage folder.
+
+      - name: Archive Coverage Results
+        uses: actions/upload-artifact@v4
+        continue-on-error: true # it will continue even if steop fails
+        with:
+          name: Code-Coverage-Results
+          path: coverage  # this will upload the entire coverage folder
+          retention-days: 5
+        
+        
+
+
