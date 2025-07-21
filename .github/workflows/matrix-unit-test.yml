@@ -1,0 +1,57 @@
+name: Run Unit Testing using Matrix Strategy
+
+on: 
+  workflow_dispatch:
+#   push:
+#     branches:
+#       - main
+#       - 'feature/*'
+# commenting for future use because my db not working with this code
+
+jobs:
+  unit-testing:
+    name: Unit Testing
+    strategy:
+        matrix:
+            node-version: [18,19,20]
+            operating-system: [ubuntu-latest, macos-latest]
+            # 3*2 = 6 combinations it will create 6 jobs to run this workflow
+            exclude:
+              - node-version: 18
+                operating-system: macos-latest
+    runs-on: ${{ matrix.operating-system }} 
+    
+    env:
+      MONGO_USERNAME: 'superuser'
+      MONGO_PASSWORD: 'SuperPassword'
+      MONGO_URI: "mongodb+srv://superrccluster.d83jj.mongodb.net/superData"
+    #  'mongodb+srv://superrccluster.d83jj.mongodb.net/superData' 
+      # mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority 
+
+    steps:
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version - ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+
+      - name: Install Dependencies
+        run: npm install
+
+      # Wait for MongoDB to be ready
+
+      - name: Unit Testing
+        run: npm test
+      - name: Archive Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: Mocha-Test.Result
+          path: test-results.xml
+        
+        
+
+
