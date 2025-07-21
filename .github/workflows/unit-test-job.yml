@@ -41,6 +41,10 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 20
+      - name: Install dependencies
+        run: |
+          npm ci ## This will install dependencies from package-lock.json
+          npm install mongoose@latest
 
       - name: Install Dependencies
         run: npm install
