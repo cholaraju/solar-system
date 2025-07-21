@@ -62,3 +62,9 @@ jobs:
       #   with:
       #     name: test-results
       #     path: test-results.xml
+      
+      
+      - name: Upload Code Coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-coverage
