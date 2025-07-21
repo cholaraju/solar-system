@@ -16,6 +16,7 @@ jobs:
             node-version: [18,19,20]
             operating-system: [ubuntu-latest, macos-latest]
             # 3*2 = 6 combinations it will create 6 jobs to run this workflow
+            # since we have used exclude syntax, to exclude an node 18 version on macos-latest it will run 5 jobs.
             exclude:
               - node-version: 18
                 operating-system: macos-latest
