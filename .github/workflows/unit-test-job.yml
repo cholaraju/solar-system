@@ -29,10 +29,11 @@ jobs:
     #       MONGO_INITDB_ROOT_PASSWORD: example
 
     env:
-      MONGO_USERNAME: root
-      MONGO_PASSWORD: example
-      MONGO_URI: "mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority"
-
+      MONGO_USERNAME: 'superuser'
+      MONGO_PASSWORD: 'SuperPassword'
+      MONGO_URI: "mongodb+srv://superrccluster.d83jj.mongodb.net/superData"
+    #  'mongodb+srv://superrccluster.d83jj.mongodb.net/superData' 
+      # mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority 
 
     steps:
       
@@ -57,15 +58,3 @@ jobs:
         
 
 
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-results
-          path: test-results.xml
-      
-      
-      - name: Upload Code Coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: code-coverage
-          path: coverage/
