@@ -9,8 +9,9 @@ on:
 
 env:
   MONGO_URI: 'mongodb://localhost:27017/testdb'
-  MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
-  MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }} 
+  MONGO_USERNAME: 'dummyUser'
+  MONGO_PASSWORD: 'dummyPassword'
+
     
 jobs:
     unit-testing:
