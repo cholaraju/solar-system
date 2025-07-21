@@ -1,0 +1,140 @@
+name: GHCR Login and push to GHCR
+
+on: 
+  workflow_dispatch:
+#   push:
+#     branches:
+#       - main
+#       - 'feature/*'
+# commenting for future use because my db not working with this code
+
+jobs:
+  unit-testing:
+    name: Unit Testing
+    strategy:
+        matrix:
+            node-version: [18,19,20]
+            operating-system: [ubuntu-latest, macos-latest]
+            # 3*2 = 6 combinations it will create 6 jobs to run this workflow
+            # since we have used exclude syntax, to exclude an node 18 version on macos-latest it will run 5 jobs.
+            exclude:
+              - node-version: 18
+                operating-system: macos-latest
+    runs-on: ${{ matrix.operating-system }} 
+    
+    env:
+      MONGO_USERNAME: 'superuser'
+      MONGO_PASSWORD: 'SuperPassword'
+      MONGO_URI: "mongodb+srv://superrccluster.d83jj.mongodb.net/superData"
+    #  'mongodb+srv://superrccluster.d83jj.mongodb.net/superData' 
+      # mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority 
+
+    steps:
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version - ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+
+      - name: Install Dependencies
+        run: npm install
+
+      # Wait for MongoDB to be ready
+
+      - name: Unit Testing
+        run: npm test
+      - name: Archive Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mocha-Test.Result
+          path: test-results.xml
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Code Coverage
+        run: npm run coverage # when we run this command it will generate a coverage folder with the coverage report with name coverage-summary.json in the coverage folder.
+
+      - name: Archive Coverage Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: Code-Coverage-Results
+          path: coverage  # this will upload the entire coverage folder
+          retention-days: 5
+  docker:
+    needs: [code-coverage,unit-testing]
+    permissions: # by using this  we can publish and pull images/packages from ghcr  by github token  write permissions
+      packages: write
+    
+    name: Containerization
+    
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout Repo
+      uses: actions/checkout@v4
+      
+    - name: Dockerhub Login
+      uses: docker/login-action@v2.2.0
+      with: 
+        username: ${{vars.DOCKERHUB_USERNAME}}
+        password: ${{ secrets.DOCKERHUB_PASSWORD}}
+    - name: GHCR Login
+      uses: docker/login-action@v2.2.0
+      with: 
+        registry: ghcr.io
+        username: ${{github.repository_owner}}
+        password: ${{ secrets.GITHUB_TOKEN}}
+    - name: Docker build for Testing
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: false
+        tags: ${{ vars.DOCKERHUB_USERNAME}}/solar-system:${{ github.sha}}
+        # ${{ github.sha}} it's an ' commit id so it so going change the version based on the commit-id
+    - name: Docker Image Testing
+      run: |
+        docker images 
+        docker run --name solar-system-app -d \
+          -p 3000:3000 \
+          -e MONGO_URI=$MONGO_URI \
+          -e MONGO_USERNAME=$MONGO_USERNAME \
+          -e MONGO_PASSWORD=$MONGO_PASSWORD \
+          ${{ vars.DOCKERHUB_USERNAME}}/solar-system:${{ github.sha }}
+        
+        export IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
+        echo $IP
+        echo Testing Image URL Using wget
+        wget -q -o  - 127.0.0.1:3000/live  | grep live
+  # we are using localhost end-point to test it 
+    -  name: Container Registry Push
+       uses: docker/build-push-action@v4
+       with: 
+         context: .
+         push: true # above we push to false by setting it true it will push image to docker  registry
+         tags: |
+           ${{ vars.DOCKERHUB_USERNAME}}/solar-system:${{ github.sha }} 
+           ghcr.io/${{github.repository_owner}}/solar-system:${{ github.sha}}
+  
+  
+        
+        
+
+
+
+  
