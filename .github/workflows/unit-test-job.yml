@@ -27,7 +27,7 @@ jobs:
           MONGO_INITDB_ROOT_PASSWORD: example
 
     env:
-      MONGO_URI: mongodb://root:example@localhost:27017
+      MONGO_URI: mongodb://root:example@mongodb:27017
       MONGO_USERNAME: root
       MONGO_PASSWORD: example
 
