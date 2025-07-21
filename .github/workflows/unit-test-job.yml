@@ -44,7 +44,7 @@ jobs:
         run: npm install
 
       - name: Wait for MongoDB to be ready
-        run: npx wait-on tcp:mongodb:27017
+        run: npx wait-on tcp:localhost:27017 --timeout 30000 # Wait for MongoDB to be ready
 
       - name: Unit Testing
         run: npm test
