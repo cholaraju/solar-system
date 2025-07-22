@@ -1,0 +1,341 @@
+name: If Expressions and Pull-Request
+ #(i.e manifests placeholder)
+# we need to give kubeconfig file to github , we are using as a secret in order for kubectl  to comminucate with cluster
+# we are using actions to set-context
+
+# kubeconig file action
+#  - name: Set Kubeconfig file
+        # uses: azure/k8s-set-context@v3
+        # with:
+        #   method: false
+        #   kubeconfig: ${{ secrets.KUBECONFIG}}
+        #   context: kind-kind
+
+
+on: 
+  workflow_dispatch:
+#   push:
+#     branches:
+#       - main
+#       - 'feature/*'
+# commenting for future use because my db not working with this code
+ # This is production Data base
+env:
+  MONGO_USERNAME: 'superuser'
+  MONGO_PASSWORD: 'SuperPassword'
+  MONGO_URI: "mongodb+srv://superrccluster.d83jj.mongodb.net/superData"
+    #  'mongodb+srv://superrccluster.d83jj.mongodb.net/superData' 
+      # mongodb+srv://root:example@cluster0.97ofrph.mongodb.net/test?retryWrites=true&w=majority 
+
+jobs:
+  unit-testing:
+    name: Unit Testing
+    #Non - production Data base
+    ## JOB CONTAINER ## AT JOB LEVEL  TAKE HIGHER PRECEDENCE And TAKES ENV AT THIS LEVEL (i.e env variable at job level)
+    services: # should be defined at job level
+      mongo-db: #label 
+        image: siddharth67/mongo-db:non-prod #pre-built image running as service container
+        ports:
+          - 27017:27017 #since we running on virtual machine to connecto to job container 
+    env:
+        # job container we use localhost & port mapping (i.e 27017 in services) 
+        # since it is running on runner machine
+        MONGO_URI: "mongodb://localhost:27017/superData"
+        # store them with repo secrets and variables
+        MONGO_USERNAME: 'superuser'
+        MONGO_PASSWORD: 'SuperPassword'
+          
+    
+        
+    strategy:
+        matrix:
+            node-version: [18,19,20]
+            operating-system: [ubuntu-latest, macos-latest]
+            # 3*2 = 6 combinations it will create 6 jobs to run this workflow
+            # since we have used exclude syntax, to exclude an node 18 version on macos-latest it will run 5 jobs.
+            exclude:
+              - node-version: 18
+                operating-system: macos-latest
+    runs-on: ${{ matrix.operating-system }} 
+
+    steps:
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup NodeJS Version - ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+
+      - name: Install Dependencies
+        run: npm install
+
+      # Wait for MongoDB to be ready
+
+      - name: Unit Testing
+        run: npm test
+      - name: Archive Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mocha-Test.Result
+          path: test-results.xml
+  code-coverage:
+    name: Code Coverage
+    ## This is a job container
+    container:
+      image: node:20
+        #Non - production Data base
+    ## SERVICE  CONTAINER ## AT JOB LEVEL  TAKE HIGHER PRECEDENCE And TAKES ENV AT THIS LEVEL (i.e env variable at job level)
+    services: # should be defined at job level
+      mongo-db: #label 
+        image: siddharth67/mongo-db:non-prod #pre-built image running as service container
+        options:  #label
+          --name mongo # name of container # since both job and service containers are running
+ # since container to container communication does not port mapping we use label to connect (i.e label here is mongo)
+ # Here container is job container service here is service container 
+    env:
+        # job container we use localhost & port mapping (i.e 27017 in services) 
+        # since it is running on runner machine
+        MONGO_URI: "mongodb://mongo:27017/superData"
+        # "mongodb://localhost:27017/superData"
+        # store them with repo secrets and variables
+        MONGO_USERNAME: 'superuser'
+        MONGO_PASSWORD: 'SuperPassword'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+    ## since  we have used a job container  which already contains node-version 20
+    # we commented out setup of nodejs version
+    #   - name: Setup NodeJS Version
+    #     uses: actions/setup-node@v3
+    #     with:
+    #       node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Code Coverage
+        run: npm run coverage # when we run this command it will generate a coverage folder with the coverage report with name coverage-summary.json in the coverage folder.
+
+      - name: Archive Coverage Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: Code-Coverage-Results
+          path: coverage  # this will upload the entire coverage folder
+          retention-days: 5
+  docker:
+    needs: [code-coverage,unit-testing]
+    name: Containerization
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout Repo
+      uses: actions/checkout@v4
+      
+    - name: Dockerhub Login
+      uses: docker/login-action@v2.2.0
+      with: 
+        username: ${{vars.DOCKERHUB_USERNAME}}
+        password: ${{ secrets.DOCKERHUB_PASSWORD}}
+  dev-deploy:
+    if: contains(github.ref,'feature/')
+    #it will run only  when the current branch is feature
+    needs: docker
+    environment: 
+      name:  development
+      url:  https://${{steps.set-ingress-host-address.outputs.APP_INGRESS_HOST}}
+    # url is noting but app that we are deploying in kubernetes so the output can be displayed and sov that reiewers can view 
+    outputs:
+      APP_INGRESS_URL : ${{steps.set-ingress-host-address.outputs.APP_INGRESS_HOST}}
+      
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout Repo
+        uses: action/checkout@v4
+        # checout the repo where the manifest files exists
+      - name: Install kubectl Cli
+        uses: azure/setup-kubectl@v3
+        # installing kubectl cli using action
+        with:
+          version: 'v1.26.0'
+          # Here we are providing KUBECONFIG FILE in order for kubectl to connet with it run commands
+      - name: Set Kubeconfig file
+        uses: azure/k8s-set-context@v3
+        with:
+          method: false
+          kubeconfig: ${{ secrets.KUBECONFIG}} # here we placed our config file in secrets of repository that why
+          context: kind-kind
+      - name: Fetch kubernets Cluster Details
+        run: | 
+          kubectl version --short
+          echo -----------------------------------------
+          kubectl get nodes
+          
+ ## This is will fail becasue we have not provided the KUBECONFIG file in order for kubectl cli to communicate with cluster and work with it
+ ## Hera we are adding kubeconfig file as secret to github
+      - name: Save Nginx ingress Controller Ip as a GITHUB Environment variable
+        run: | 
+          echo "INGRESS_IP=${kubectl -n ingress-nginx get services ingress-nginx-controller -o jsonpath="{.status.loadbalancer.ingress[0].ip}"}" >> $GITHUB_ENV
+          # Here we are going to create Environment variable in the workflow and use it across the steps or multiple jobs  we are using action called  $GITHUB_ENV to set env variable
+          # we can access this using ${{env.INGRESS_IP}} we are env because by above action we set env variables 
+      - name: replace Token inn manifest file
+        uses: cschleiden/replace-tokens@v1
+        with:
+            tokenPrefix: '_{_'
+            tokenSuffix: '_}_'
+            files: '["kubernetes/development/*.yaml"]' # location where you want repalce these Token # Here the location is kubernetes/development where our manifests file Exists
+        env:
+          NAMESPACE: ${{vars.NAMESPACE}}
+          REPLICAS: ${{vars.REPLICAS}}
+          IMAGE: ${{vars.DOCKERHUB_USERNAME}}/solar-system:${{github.sha}}
+          INGRESS_IP: ${{env.INGRESS_IP}}
+
+      - name: check files
+        run: |
+          cat kubernetes/development/*.yaml
+          
+    # To check we corectly replaced the Tokens in kubernets manifest files which are in the path  kubernetes/development/*.yaml
+    # but deployment will fail because  we are using secretRef in deployment.yaml file
+    # so we need to create secret before we deploy in cluster
+    # because our docker file  using env  so we create  secrets such as to pass values
+    # ENV MONGO_URI=uriPlaceholder
+    #  ENV MONGO_USERNAME=usernamePlaceholder
+   # ENV MONGO_PASSWORD=passwordPlaceholder
+      - name: Create MongoDB secret
+        run: | 
+          kubectl  -n {{vars.NAMESPACE}} create secret generic mongo-db-creds \
+          --from-literal=MONGO_URI=${{env.MONGO_URI}} \
+          --from-literal=MONGO_USERNAME=${{vars.MONGO_USERNAME}} \
+          --from-literal=MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD}} |
+          --save-config \
+          --dry-run=client \
+          -o yaml | kubectl apply -f -
+        # mongo-db-creds this is name that we used on deployment file as secret name
+
+      # it will apply all files to deploy
+      - name: Deploy to Dev Env
+        run: |
+          kubectl apply -f kubernetes/development
+      - name: Set App Ingress Host URL
+        id: set-ingress-host-address
+        run: | 
+          echo "APP_INGRESS_HOST=$(kbuectl -n ${{ vars.NAMESPACE}}) get ingress -o jsonpath="{.items[0].spec.tls[0].hosts[0]}")" >> "$GITHUB_OUTPUT"
+          
+      # we are using GITHUBENV to pass variable to next steps
+      # but we want to pass between two jobs we have to use job output from one job and reference in another job
+  dev-integration-testing:
+    if: contains(github.ref,'feature/')
+    name: Dev integration Testing
+    needs: dev-deploy
+    runs-on:  ubuntu-latest
+    steps:
+      - name: Test URL Output using CURL and JQ
+        env:
+          URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL}}
+        run: |
+          echo $URL
+          echo "_ _ _ _ _ _ _ _  _  _ _ _ _"
+          curl https://$URL/live -s -k | jq -r .status | grep -i live
+          # we get the url to test the endpoint from the above step i.e application HOST url
+  
+  prod-deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: docker
+    environment: 
+       name: production
+       url: https://${{steps.set-ingress-host-address.outputs.APP_INGRESS_HOST}}
+    # url is noting but app that we are deploying in kubernetes so the output can be displayed and sov that reiewers can view 
+    outputs:
+      APP_INGRESS_URL : ${{steps.set-ingress-host-address.outputs.APP_INGRESS_HOST}}
+      
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout Repo
+        uses: action/checkout@v4
+        # checout the repo where the manifest files exists
+      - name: Install kubectl Cli
+        uses: azure/setup-kubectl@v3
+        # installing kubectl cli using action
+        with:
+          version: 'v1.26.0'
+          # Here we are providing KUBECONFIG FILE in order for kubectl to connet with it run commands
+      - name: Set Kubeconfig file
+        uses: azure/k8s-set-context@v3
+        with:
+          method: false
+          kubeconfig: ${{ secrets.KUBECONFIG}} # here we placed our config file in secrets of repository that why
+          context: kind-kind
+      - name: Fetch kubernets Cluster Details
+        run: | 
+          kubectl version --short
+          echo -----------------------------------------
+          kubectl get nodes
+          
+ ## This is will fail becasue we have not provided the KUBECONFIG file in order for kubectl cli to communicate with cluster and work with it
+ ## Hera we are adding kubeconfig file as secret to github
+      - name: Save Nginx ingress Controller Ip as a GITHUB Environment variable
+        run: | 
+          echo "INGRESS_IP=${kubectl -n ingress-nginx get services ingress-nginx-controller -o jsonpath="{.status.loadbalancer.ingress[0].ip}"}" >> $GITHUB_ENV
+          # Here we are going to create Environment variable in the workflow and use it across the steps or multiple jobs  we are using action called  $GITHUB_ENV to set env variable
+          # we can access this using ${{env.INGRESS_IP}} we are env because by above action we set env variables 
+      - name: replace Token inn manifest file
+        uses: cschleiden/replace-tokens@v1
+        with:
+            tokenPrefix: '_{_'
+            tokenSuffix: '_}_'
+            files: '["kubernetes/production/*.yaml"]' # location where you want repalce these Token # Here the location is kubernetes/development where our manifests file Exists
+        env:
+          NAMESPACE: ${{vars.NAMESPACE}}
+          REPLICAS: ${{vars.REPLICAS}}
+          IMAGE: ${{vars.DOCKERHUB_USERNAME}}/solar-system:${{github.sha}}
+          INGRESS_IP: ${{env.INGRESS_IP}}
+
+      - name: check files
+        run: |
+          cat kubernetes/production/*.yaml
+          
+    # To check we corectly replaced the Tokens in kubernets manifest files which are in the path  kubernetes/development/*.yaml
+    # but deployment will fail because  we are using secretRef in deployment.yaml file
+    # so we need to create secret before we deploy in cluster
+    # because our docker file  using env  so we create  secrets such as to pass values
+    # ENV MONGO_URI=uriPlaceholder
+    #  ENV MONGO_USERNAME=usernamePlaceholder
+   # ENV MONGO_PASSWORD=passwordPlaceholder
+      - name: Create MongoDB secret
+        run: | 
+          kubectl  -n {{vars.NAMESPACE}} create secret generic mongo-db-creds \
+          --from-literal=MONGO_URI=${{env.MONGO_URI}} \
+          --from-literal=MONGO_USERNAME=${{vars.MONGO_USERNAME}} \
+          --from-literal=MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD}} |
+          --save-config \
+          --dry-run=client \
+          -o yaml | kubectl apply -f -
+        # mongo-db-creds this is name that we used on deployment file as secret name
+
+      # it will apply all files to deploy
+      - name: Deploy to production Environment
+        run: |
+          kubectl apply -f kubernetes/production
+      - name: Set App Ingress Host URL
+        id: set-ingress-host-address
+        run: | 
+          echo "APP_INGRESS_HOST=$(kbuectl -n ${{ vars.NAMESPACE}}) get ingress -o jsonpath="{.items[0].spec.tls[0].hosts[0]}")" >> "$GITHUB_OUTPUT"
+          
+      # we are using GITHUBENV to pass variable to next steps
+      # but we want to pass between two jobs we have to use job output from one job and reference in another job
+  prod-integration-testing:
+    name: prod integration Testing
+    if: github.ref == 'refs/heads/main'
+    needs: prod-deploy
+    runs-on:  ubuntu-latest
+    steps:
+      - name: Test URL Output using CURL and JQ
+        env:
+          URL: ${{ needs.prod-deploy.outputs.APP_INGRESS_URL}}
+        run: |
+          echo $URL
+          echo "_ _ _ _ _ _ _ _  _  _ _ _ _"
+          curl https://$URL/live -s -k | jq -r .status | grep -i live
+          # we get the url to test the endpoint from the above step i.e app
