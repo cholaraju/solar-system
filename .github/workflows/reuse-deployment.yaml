@@ -1,12 +1,46 @@
-name: Deployment-Reuseable workflow
+name: Deployment-Reuseable workflow with inputs and outps
+
+# For dev-deploy and prod-deploy we are creating Reusable-workflow
 
 on: 
    workflow_call: 
+    inputs:
+      mongodb-uri:
+        required: true
+        type: string
+      kubectl-version:
+         description: Provide the required kubectl version
+         default: v1.27.0
+         required: false
+         type: string
+         # it will default to v1.27.0 if we not provide any value in caller file that is  PR.yaml file
+      k8s-manifest-dir:
+        description: Directory containing  manifests files
+        default: kubernetes/
+        required: true
+        type:  string
+      environment:
+        description: provide the deploymet environment
+        default:  dev
+        required:  true
+        type: string 
+        
+        # some secrets are not propagated from caller workflow to called that why
+       # we use inputs to propagate them 
+       
+    secrets:
+      k8s-kubeconfig:
+        required: true
+      mongodb-password:
+        required: true
+    outputs:
+      application-url:
+        value: ${{jobs.reuse-deploy.outputs.APP_INGRESS_URL}}
    
 jobs:
   reuse-deploy:
       environment: 
-        name:  development
+        name: ${{ inputs.environment}}
         url:  https://${{steps.set-ingress-host-address.outputs.APP_INGRESS_HOST}}
         # url is noting but app that we are deploying in kubernetes so the output can be displayed and sov that reiewers can view 
       outputs:
@@ -21,13 +55,13 @@ jobs:
             uses: azure/setup-kubectl@v3
             # installing kubectl cli using action
             with:
-              version: 'v1.26.0'
+              version: '${{inputs.kubectl-version}}'
               # Here we are providing KUBECONFIG FILE in order for kubectl to connet with it run commands
           - name: Set Kubeconfig file
             uses: azure/k8s-set-context@v3
             with:
               method: false
-              kubeconfig: ${{ secrets.KUBECONFIG}} # here we placed our config file in secrets of repository that why
+              kubeconfig: ${{ secrets.k8s-kubeconfig}} # here we placed our config file in secrets of repository that why
               context: kind-kind
           - name: Fetch kubernets Cluster Details
             run: | 
@@ -47,7 +81,7 @@ jobs:
             with:
                 tokenPrefix: '_{_'
                 tokenSuffix: '_}_'
-                files: '["kubernetes/development/*.yaml"]' # location where you want repalce these Token # Here the location is kubernetes/development where our manifests file Exists
+                files: '["${{ inputs.k8s-manifest-dir}}*.yaml"]' # location where you want repalce these Token # Here the location is kubernetes/development where our manifests file Exists
             env:
               NAMESPACE: ${{vars.NAMESPACE}}
               REPLICAS: ${{vars.REPLICAS}}
@@ -56,7 +90,7 @@ jobs:
     
           - name: check files
             run: |
-              cat kubernetes/development/*.yaml
+              cat ${{ inputs.k8s-manifest-dir}}*.yaml
               
         # To check we corectly replaced the Tokens in kubernets manifest files which are in the path  kubernetes/development/*.yaml
         # but deployment will fail because  we are using secretRef in deployment.yaml file
@@ -68,9 +102,9 @@ jobs:
           - name: Create MongoDB secret
             run: | 
               kubectl  -n {{vars.NAMESPACE}} create secret generic mongo-db-creds \
-              --from-literal=MONGO_URI=${{env.MONGO_URI}} \
+              --from-literal=MONGO_URI=${{inputs.mongodb-uri}} \
               --from-literal=MONGO_USERNAME=${{vars.MONGO_USERNAME}} \
-              --from-literal=MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD}} |
+              --from-literal=MONGO_PASSWORD=${{ secrets.mongodb-password}} |
               --save-config \
               --dry-run=client \
               -o yaml | kubectl apply -f -
@@ -79,7 +113,7 @@ jobs:
           # it will apply all files to deploy
           - name: Deploy to Dev Env
             run: |
-              kubectl apply -f kubernetes/development
+              kubectl apply -f ${{ inputs.k8s-manifest-dir}}
           - name: Set App Ingress Host URL
             id: set-ingress-host-address
             run: | 

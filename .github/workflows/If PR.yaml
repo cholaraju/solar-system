@@ -144,6 +144,28 @@ jobs:
     #it will run only  when the current branch is feature
     needs: docker
     uses: ./.gihub/workflows/reuse-deployment.yaml
+    secrets:
+      k8s-kubeconfig: ${{secrets.KUBECONFIG}}
+      mongodb-password: ${{secrets.MONGO_PASSWORD}}
+  # Here we are passing secrets from caller to called (i.e  form pr.yaml to reuse-deployment.yaml)
+  ## input use with  with keyword  based keys defined in called workflow i.e reusable workflows 
+    with:
+      mongodb-uri: ${{ vars.MONGO_URI}}
+      #key
+      environment: devlopment 
+      #key
+      k8s-manifest-dir: kubernetes/development
+      #key
+      ## using the inputs
+          # using mongodb-uri as key in the reusable workflow in reuse-depl.yaml file
+      # for this  in reuse-deployment.yaml file 
+      # inputs:
+      # mongodb-uri:
+      #   required: true
+        # type: string
+# Here we passing secrets from caller to called (i.e  form pr.yaml to reuse-deployment.yaml)
+    
+  prod-integration-testing:
    
   dev-integration-testing:
     if: contains(github.ref,'feature/')
@@ -153,8 +175,9 @@ jobs:
     steps:
       - name: Test URL Output using CURL and JQ
         env:
-          URL: ${{ needs.dev-deploy.outputs.APP_INGRESS_URL}}
-        run: |
+          URL: ${{ needs.dev-deploy.outputs.application-url}}
+              # application-url is got from reuse-workflow outputs accessing with-its key  i.e application-url
+        run: |     
           echo $URL
           echo "_ _ _ _ _ _ _ _  _  _ _ _ _"
           curl https://$URL/live -s -k | jq -r .status | grep -i live
@@ -164,6 +187,22 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: docker
     uses: ./.github/workflows/reuse-deployment.yaml
+    secrets:
+      k8s-kubeconfig: ${{secrets.KUBECONFIG}}
+      mongodb-password: ${{secrets.MONGO_PASSWORD}}
+    with:
+      mongodb-uri: ${{ vars.MONGO_URI}}  
+      environment: production
+      k8s-manifest-dir: kubernetes/production
+      
+      # using mongodb-uri as key in the reusable workflow in reuse-depl.yaml file
+      # for this 
+      # inputs:
+      # mongodb-uri:
+      #   required: true
+        # type: string
+# Here we passing secrets from caller to called (i.e  form pr.yaml to reuse-deployment.yaml)
+    
   prod-integration-testing:
     name: prod integration Testing
     if: github.ref == 'refs/heads/main'
@@ -172,7 +211,7 @@ jobs:
     steps:
       - name: Test URL Output using CURL and JQ
         env:
-          URL: ${{ needs.prod-deploy.outputs.APP_INGRESS_URL}}
+          URL: ${{ needs.prod-deploy.outputs.application-url}}
         run: |
           echo $URL
           echo "_ _ _ _ _ _ _ _  _  _ _ _ _"
