@@ -1,4 +1,4 @@
-name: If Expressions and Pull-Request
+name: If Expressions and Pull-Request with inputs and outputs
  #(i.e manifests placeholder)
 # we need to give kubeconfig file to github , we are using as a secret in order for kubectl  to comminucate with cluster
 # we are using actions to set-context
@@ -165,7 +165,7 @@ jobs:
         # type: string
 # Here we passing secrets from caller to called (i.e  form pr.yaml to reuse-deployment.yaml)
     
-  prod-integration-testing:
+  # prod-integration-testing:
    
   dev-integration-testing:
     if: contains(github.ref,'feature/')
@@ -217,3 +217,5 @@ jobs:
           echo "_ _ _ _ _ _ _ _  _  _ _ _ _"
           curl https://$URL/live -s -k | jq -r .status | grep -i live
           # we get the url to test the endpoint from the above step i.e app
+
+
