@@ -82,6 +82,8 @@ jobs:
           name: Mocha-Test.Result
           path: test-results.xml
   code-coverage:
+  
+  
     name: Code Coverage
     ## This is a job container
     container:
@@ -126,6 +128,10 @@ jobs:
           name: Code-Coverage-Results
           path: coverage  # this will upload the entire coverage folder
           retention-days: 5
+
+  
+  
+  
   docker:
     needs: [code-coverage,unit-testing]
     name: Containerization
